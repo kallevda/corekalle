@@ -1,15 +1,177 @@
 ---
-title: "Portofolio Kalle"
+title: "Computational Musicology Portofolio"
 author: "Kalle"
 date: "2/10/2021"
-output: html_document
+output: 
+  flexdashboard::flex_dashboard:
+    orientation: columns
+    social: menu
+    storyboard: true
+    theme: flatly
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(echo = FALSE)
 ```
 
-## heading
+```{r}
+library(tidyverse)
+library(rbokeh)
+library(plotly)
+library(spotifyr)
+library(compmus)
+```
+
+Column {data-width=600}
+-----------------------------------------------------------------------
+
+### Confusion Matrix of Hip-Hop, House and Kwaito
+
+```{r}
+library(tidyverse)
+library(tidymodels)
+library(spotifyr)
+library(ggdendro)
+library(heatmaply)
+library(compmus)
+
+get_conf_mat <- function(fit) {
+  outcome <- .get_tune_outcome_names(fit)
+  fit %>% 
+    collect_predictions() %>% 
+    conf_mat(truth = outcome, estimate = .pred_class)
+}  
+
+get_pr <- function(fit) {
+  fit %>% 
+    conf_mat_resampled() %>% 
+    group_by(Prediction) %>% mutate(precision = Freq / sum(Freq)) %>% 
+    group_by(Truth) %>% mutate(recall = Freq / sum(Freq)) %>% 
+    ungroup() %>% filter(Prediction == Truth) %>% 
+    select(class = Prediction, precision, recall)
+}
+
+HIPHOP <- 
+  get_playlist_audio_features("spotify", "2MOqzRnIikBt5jiruMRv0r")
+HOUSE <- get_playlist_audio_features("spotify", "37i9dQZF1DWTU3Zl0elDUa")
+KWAITO <- get_playlist_audio_features("spotify", "48lmHgufe6tzfltv1MtA00")
+all_three_genres <-
+  bind_rows(
+    HIPHOP %>% mutate(playlist = "HIP HOP") %>% slice_head(n = 50),
+    HOUSE %>% mutate(playlist = "CLASSIC HOUSE") %>% slice_head(n = 50),
+    KWAITO %>% mutate(playlist = "SA KWAITO") %>% slice_head(n = 50)
+  )
+
+all_three_genres_features <-
+all_three_genres %>%
+  add_audio_analysis() %>% 
+  mutate(
+    playlist = factor(playlist),
+    segments = map2(segments, key, compmus_c_transpose),
+    pitches =
+      map(
+        segments,
+        compmus_summarise, pitches,
+        method = "mean", norm = "manhattan"
+      ),
+    timbre =
+      map(
+        segments,
+        compmus_summarise, timbre,
+        method = "mean",
+      )
+  ) %>%
+  mutate(pitches = map(pitches, compmus_normalise, "clr")) %>%
+  mutate_at(vars(pitches, timbre), map, bind_rows) %>%
+  unnest(cols = c(pitches, timbre))
+
+all_three_genres_recipe <-
+  recipe(
+    playlist ~
+      danceability +
+      energy +
+      loudness +
+      speechiness +
+      acousticness +
+      instrumentalness +
+      liveness +
+      valence +
+      tempo +
+      duration +
+      C + `C#|Db` + D + `D#|Eb` +
+      E + `F` + `F#|Gb` + G +
+      `G#|Ab` + A + `A#|Bb` + B +
+      c01 + c02 + c03 + c04 + c05 + c06 +
+      c07 + c08 + c09 + c10 + c11 + c12,
+    data = all_three_genres_features,
+  ) %>%
+  step_center(all_predictors()) %>%
+  step_scale(all_predictors())
+
+all_three_genres_cv <- all_three_genres_features %>% vfold_cv(5)
+
+knn_model <-
+  nearest_neighbor(neighbors = 1) %>%
+  set_mode("classification") %>% 
+  set_engine("kknn")
+all_three_genres_knn <- 
+  workflow() %>% 
+  add_recipe(all_three_genres_recipe) %>% 
+  add_model(knn_model) %>% 
+  fit_resamples(
+    all_three_genres_cv, 
+    control = control_resamples(save_pred = TRUE)
+  )
+
+all_three_genres_knn %>% get_conf_mat()
+
+all_three_genres_knn %>% get_conf_mat() %>% autoplot(type = "mosaic")
+
+all_three_genres_knn %>% get_conf_mat() %>% autoplot(type = "heatmap")
+
+all_three_genres_knn %>% get_pr()
+
+tree_model <-
+  decision_tree() %>%
+  set_mode("classification") %>% 
+  set_engine("C5.0")
+all_three_genres_tree <- 
+  workflow() %>% 
+  add_recipe(all_three_genres_recipe) %>% 
+  add_model(tree_model) %>% 
+  fit_resamples(
+    all_three_genres_cv, 
+    control = control_resamples(save_pred = TRUE)
+  )
+
+all_three_genres_tree %>% get_pr()
+
+```
+
+### Hip-Hop, House or Kwaito?
+
+
+```{r}
+KWAITO <- get_playlist_audio_features("", "48lmHgufe6tzfltv1MtA00")
+HOUSE <- get_playlist_audio_features("", "37i9dQZF1DWTU3Zl0elDUa")
+HIPHOP <- get_playlist_audio_features("", "2MOqzRnIikBt5jiruMRv0r")
+
+figure(width = NULL, height = NULL) %>%
+  ly_points(tempo, danceability, data = HIPHOP, color = speechiness)
+# figure() %>%
+#   ly_points(tempo, danceability, data = HIPHOP,
+#     color = valence, glyph = instrumentalness )
+
+
+```
+*** 
+
+**plot of tempo and speechiness in hiphop**
+
+### Let's look at the data
+
+### Chroma
+
 ### subheading
 #### subsubheading
 
@@ -21,16 +183,4 @@ This is an R Markdown document. Markdown is a simple formatting syntax for autho
 
 When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
 
-```{r cars}
-summary(cars)
-```
 
-## Including Plots
-
-You can also embed plots, for example:
-
-```{r pressure, echo=FALSE}
-plot(pressure)
-```
-
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
