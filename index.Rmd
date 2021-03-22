@@ -25,7 +25,7 @@ library(compmus)
 Column {data-width=600}
 -----------------------------------------------------------------------
 
-### Confusion Matrix of Hip-Hop, House and Kwaito
+### (NEW!) Confusion Matrix of Hip-Hop, House and Kwaito
 
 ```{r}
 library(tidyverse)
